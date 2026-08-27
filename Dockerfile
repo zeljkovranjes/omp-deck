@@ -62,6 +62,8 @@ RUN bun install --frozen-lockfile --production
 # Sources for runtime (Bun executes TS natively — no transpile step).
 COPY packages/protocol packages/protocol
 COPY apps/server apps/server
+COPY starter-skills starter-skills
+COPY starter-extensions starter-extensions
 
 # Built web assets.
 COPY --from=web-build /app/apps/web/dist /app/apps/web/dist

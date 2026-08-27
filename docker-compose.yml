@@ -18,14 +18,13 @@ services:
       OMP_DECK_WEB_DIST: "/app/apps/web/dist"
       OMP_DECK_DEFAULT_CWD: "/workspace"
       OMP_DECK_WORKSPACES: "/workspace"
-      OMP_AGENT_DIR: "/data/omp-agent"
+      OMP_AGENT_DIR: "/home/bun/.omp/agent"
       OMP_DECK_DATA_DIR: "/data/omp-deck"
       OMP_DECK_DB_PATH: "/data/omp-deck/deck.db"
       OMP_DECK_UPLOADS_ROOT: "/data/omp-deck/uploads"
       NODE_ENV: "production"
       LOG_LEVEL: "info"
     volumes:
-      - /srv/docker-data/omp-deck/agent:/data/omp-agent
       - /srv/docker-data/omp-deck/data:/data/omp-deck
       - /srv/docker-data/omp-deck/sdk-state:/home/bun/.omp
       - /srv/docker-data/omp-deck/kb:/home/bun/kb
@@ -41,7 +40,7 @@ services:
     stop_signal: SIGTERM
     stop_grace_period: 20s
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8787/api/health"]
+      test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:8787/api/health');if(!r.ok)process.exit(1)"]
       interval: 30s
       timeout: 5s
       retries: 3
