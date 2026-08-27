@@ -12,6 +12,8 @@ services:
     user: "1000:1000"
     ports:
       - "127.0.0.1:8788:8787"
+    networks:
+      - sys-gateway
     environment:
       OMP_DECK_HOST: "0.0.0.0"
       OMP_DECK_PORT: "8787"
@@ -45,3 +47,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+networks:
+  sys-gateway:
+    external: true
+    name: sys-gateway_default
