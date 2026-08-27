@@ -59,6 +59,13 @@ COPY apps/bridges/telegram/package.json apps/bridges/telegram/
 
 RUN bun install --frozen-lockfile --production
 
+# The upstream OAuth client advertises localhost:1455 (required by OpenAI) and
+# also binds only to container-local localhost. For this remote deployment,
+# retain the advertised URI but allow the listener to bind on the container
+# interface so a loopback-only host port plus SSH tunnel can reach it.
+COPY scripts/patch-openai-oauth-listener.mjs scripts/
+RUN bun scripts/patch-openai-oauth-listener.mjs
+
 # Sources for runtime (Bun executes TS natively — no transpile step).
 COPY packages/protocol packages/protocol
 COPY apps/server apps/server

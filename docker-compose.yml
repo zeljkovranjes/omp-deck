@@ -12,6 +12,9 @@ services:
     user: "1000:1000"
     ports:
       - "127.0.0.1:8788:8787"
+      # OpenAI's registered Codex callback is fixed to localhost:1455. Keep
+      # this host-side loopback-only; clients reach it through an SSH tunnel.
+      - "127.0.0.1:1455:1455"
     networks:
       - sys-gateway
     environment:
@@ -26,6 +29,7 @@ services:
       OMP_DECK_UPLOADS_ROOT: "/data/omp-deck/uploads"
       NODE_ENV: "production"
       LOG_LEVEL: "info"
+      OMP_DECK_OAUTH_BIND_HOST: "0.0.0.0"
     volumes:
       - /srv/docker-data/omp-deck/data:/data/omp-deck
       - /srv/docker-data/omp-deck/sdk-state:/home/bun/.omp

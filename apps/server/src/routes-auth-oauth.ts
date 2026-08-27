@@ -54,6 +54,77 @@ function defer<T>(): Deferred<T> {
 	return { promise, resolve, reject };
 }
 
+/**
+ * Multi-shot input channel for manually pasted OAuth callbacks.
+ *
+ * The SDK intentionally calls `onManualCodeInput()` again when a pasted value
+ * is malformed or has the wrong state. A single permanently-resolved Deferred
+ * makes every retry return the same bad value in a tight loop, which wedges the
+ * flow and can burn CPU. This small queue gives each SDK request a fresh wait.
+ */
+interface ManualCodeChannel {
+	queued: string[];
+	waiters: Deferred<string>[];
+	closed?: Error;
+}
+
+function createManualCodeChannel(): ManualCodeChannel {
+	return { queued: [], waiters: [] };
+}
+
+function takeManualCode(channel: ManualCodeChannel): Promise<string> {
+	const queued = channel.queued.shift();
+	if (queued !== undefined) return Promise.resolve(queued);
+	if (channel.closed) return Promise.reject(channel.closed);
+	const waiter = defer<string>();
+	channel.waiters.push(waiter);
+	return waiter.promise;
+}
+
+function offerManualCode(channel: ManualCodeChannel, value: string): boolean {
+	if (channel.closed) return false;
+	const waiter = channel.waiters.shift();
+	if (waiter) waiter.resolve(value);
+	else channel.queued.push(value);
+	return true;
+}
+
+function closeManualCodeChannel(channel: ManualCodeChannel, reason: Error): void {
+	if (channel.closed) return;
+	channel.closed = reason;
+	channel.queued.length = 0;
+	for (const waiter of channel.waiters.splice(0)) waiter.reject(reason);
+}
+
+/** Return an actionable error for an obviously invalid manual callback. */
+function validateManualCallbackInput(input: string): string | null {
+	const value = input.trim();
+	if (!value) return "Paste the callback URL or authorization code.";
+
+	try {
+		const url = new URL(value);
+		if (url.protocol === "http:" || url.protocol === "https:") {
+			if (!url.searchParams.get("code")) {
+				return "That URL has no authorization code. Copy the full localhost callback URL from the browser address bar.";
+			}
+			return null;
+		}
+	} catch {
+		// Not a URL. The SDK also accepts a query string or a raw code.
+	}
+
+	if (value.includes("code=")) {
+		const params = new URLSearchParams(value.replace(/^[?#]/, ""));
+		if (!params.get("code")) return "The pasted callback contains an empty authorization code.";
+		return null;
+	}
+
+	if (/\s/.test(value)) {
+		return "This does not look like a callback URL or authorization code. Copy the full URL from the browser address bar.";
+	}
+	return null;
+}
+
 const log = logger("oauth-routes");
 
 /**
@@ -74,7 +145,7 @@ interface ActiveFlow {
 	provider: string;
 	ac: AbortController;
 	consentReady: Deferred<{ url: string; instructions?: string }>;
-	manualCode: Deferred<string>;
+	manualCode: ManualCodeChannel;
 	promptResolvers: Map<string, (answer: string) => void>;
 	consent?: { url: string; instructions?: string };
 	status: "awaiting-consent" | "consent-ready" | "exchanging" | "done" | "errored";
@@ -109,7 +180,7 @@ function abortFlow(flow: ActiveFlow, reason: string): void {
 	}
 	clearTimeout(flow.expirationTimer);
 	const err = new Error(reason);
-	flow.manualCode.reject(err);
+	closeManualCodeChannel(flow.manualCode, err);
 	flow.consentReady.reject(err);
 	// Resolve outstanding prompt waits with an empty string — rejecting via
 	// throw would surface as an uncaught error in the SDK's onPrompt caller;
@@ -211,7 +282,7 @@ export function buildAuthOAuthRouter(): Hono {
 			provider,
 			ac: new AbortController(),
 			consentReady: defer<{ url: string; instructions?: string }>(),
-			manualCode: defer<string>(),
+			manualCode: createManualCodeChannel(),
 			promptResolvers: new Map(),
 			status: "awaiting-consent",
 			startedAt: Date.now(),
@@ -231,10 +302,6 @@ export function buildAuthOAuthRouter(): Hono {
 				message: `OAuth flow timed out after ${Math.round(OAUTH_FLOW_MAX_MS / 60_000)} minutes`,
 			});
 		}, OAUTH_FLOW_MAX_MS);
-		// Manual-code deferred may be rejected on cancel even when the SDK never
-		// awaited it (loopback won the race) — silence the unhandled rejection
-		// instead of letting Bun's postmortem surface it as a spurious server error.
-		flow.manualCode.promise.catch(() => {});
 		flows.set(provider, flow);
 		flowsById.set(flowId, flow);
 
@@ -271,7 +338,7 @@ export function buildAuthOAuthRouter(): Hono {
 				},
 				// Mobile/Tailscale fallback — racer against the SDK's loopback listener.
 				// Resolves only when the client POSTs `/manual-code`.
-				onManualCodeInput: () => flow.manualCode.promise,
+				onManualCodeInput: () => takeManualCode(flow.manualCode),
 				signal: flow.ac.signal,
 			})
 			.then(
@@ -342,7 +409,11 @@ export function buildAuthOAuthRouter(): Hono {
 		if (!body.code || typeof body.code !== "string") {
 			return c.json({ error: "code is required" }, 400);
 		}
-		flow.manualCode.resolve(body.code);
+		const validationError = validateManualCallbackInput(body.code);
+		if (validationError) return c.json({ error: "invalid-callback", message: validationError }, 400);
+		if (!offerManualCode(flow.manualCode, body.code.trim())) {
+			return c.json({ error: "flow closed", message: "This OAuth flow has already ended. Start a new sign-in." }, 409);
+		}
 		return c.json({ ok: true });
 	});
 
