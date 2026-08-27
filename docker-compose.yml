@@ -27,6 +27,7 @@ services:
     volumes:
       - /srv/docker-data/omp-deck/agent:/data/omp-agent
       - /srv/docker-data/omp-deck/data:/data/omp-deck
+      - /srv/docker-data/omp-deck/sdk-state:/home/bun/.omp
       - /srv/docker-data/omp-deck/kb:/home/bun/kb
       - /srv/docker-data/omp-deck/workspace:/workspace
     read_only: true
