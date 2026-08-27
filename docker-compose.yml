@@ -1,51 +1,47 @@
-# omp-deck server — loopback-bound by default. Front it with Tailscale or an
-# SSH tunnel on the host. Never publish 0.0.0.0 unless you've put a real proxy
-# with auth in front (this image has no auth of its own).
-
 services:
   omp-deck:
     build:
       context: .
       dockerfile: Dockerfile
-    image: omp-deck:latest
+      args:
+        OMP_DECK_BASE_PATH: /agents/omp
+    image: local/omp-deck:0.6.1-sys
+    container_name: omp-deck
     restart: unless-stopped
-    # Loopback-only on the host. To expose over Tailscale, either:
-    #   - Run `tailscale serve --bg --https=443 http://127.0.0.1:8787`
-    #   - Or bind the Tailscale interface IP instead of 127.0.0.1.
+    init: true
+    user: "1000:1000"
     ports:
-      - "127.0.0.1:8787:8787"
+      - "127.0.0.1:8788:8787"
     environment:
-      # The container listens on all interfaces inside its network namespace.
-      # Host-side loopback bind is what isolates it from the world.
       OMP_DECK_HOST: "0.0.0.0"
       OMP_DECK_PORT: "8787"
       OMP_DECK_WEB_DIST: "/app/apps/web/dist"
-      # Default workspace cwd inside the container. Mount your actual workspace
-      # under /workspace and set this to /workspace to give the agent access.
       OMP_DECK_DEFAULT_CWD: "/workspace"
-      # Persisted omp session JSONLs + auth db live here.
+      OMP_DECK_WORKSPACES: "/workspace"
       OMP_AGENT_DIR: "/data/omp-agent"
+      OMP_DECK_DATA_DIR: "/data/omp-deck"
+      OMP_DECK_DB_PATH: "/data/omp-deck/deck.db"
+      OMP_DECK_UPLOADS_ROOT: "/data/omp-deck/uploads"
       NODE_ENV: "production"
       LOG_LEVEL: "info"
-      # Pass through provider keys (or pre-populate ~/.omp/agent/agent.db via the
-      # `omp /login` flow before baking the image).
-      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
     volumes:
-      # Persist omp session state across container restarts.
-      - omp-deck-agent:/data/omp-agent
-      # Mount the workspace the agent should operate in. Edit this for your box.
-      - ${OMP_DECK_WORKSPACE:-./workspace}:/workspace
-    # Send SIGTERM to the Bun process directly; it cleans up bridge + bun.serve.
+      - /srv/docker-data/omp-deck/agent:/data/omp-agent
+      - /srv/docker-data/omp-deck/data:/data/omp-deck
+      - /srv/docker-data/omp-deck/kb:/home/bun/kb
+      - /srv/docker-data/omp-deck/workspace:/workspace
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
     stop_signal: SIGTERM
-    stop_grace_period: 10s
+    stop_grace_period: 20s
     healthcheck:
       test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8787/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
-
-volumes:
-  omp-deck-agent:
+      start_period: 20s

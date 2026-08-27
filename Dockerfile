@@ -25,6 +25,9 @@
 FROM oven/bun:1.3.14 AS web-build
 WORKDIR /app
 
+ARG OMP_DECK_BASE_PATH=/
+ENV OMP_DECK_BASE_PATH=${OMP_DECK_BASE_PATH}
+
 # Workspace manifests first for cache-friendly install. All five must be
 # present so bun's frozen-lockfile resolver sees the same workspace graph
 # the lockfile was generated against — including the telegram bridge,

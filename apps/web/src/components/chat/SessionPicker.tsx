@@ -227,7 +227,7 @@ function OnboardingReminderTile() {
 		<div className="mb-4 flex items-start gap-3 rounded border border-accent/40 bg-accent/5 p-3 text-xs text-ink-2">
 			<div className="flex-1">
 				You skipped onboarding. Re-run it any time from{" "}
-				<a href="/onboarding" className="font-medium text-accent underline">
+				<a href={`${import.meta.env.BASE_URL}onboarding`} className="font-medium text-accent underline">
 					Settings → Onboarding
 				</a>
 				.
@@ -275,7 +275,7 @@ function WelcomeTaskTile() {
 	if (!visible) return null;
 	return (
 		<a
-			href="/tasks"
+			href={`${import.meta.env.BASE_URL}tasks`}
 			className="mb-4 flex items-center justify-between gap-3 rounded border border-line bg-paper-2 p-3 text-sm text-ink hover:border-accent/40 hover:bg-accent/5"
 		>
 			<div className="flex items-center gap-2">

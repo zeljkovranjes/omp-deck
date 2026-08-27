@@ -41,24 +41,27 @@ function OnboardingGate() {
 	return <Outlet />;
 }
 
-const router = createBrowserRouter([
-	{
-		element: <OnboardingGate />,
-		children: [
-			{ path: "/", element: <ChatView /> },
-			{ path: "/tasks", element: <TasksView /> },
-			{ path: "/routines", element: <RoutinesView /> },
-			{ path: "/routines/:id/runs/:runId", element: <RunDetailView /> },
-			{ path: "/inbox", element: <InboxView /> },
-			{ path: "/marketplace", element: <MarketplaceView /> },
-			{ path: "/skills", element: <SkillsView /> },
-			{ path: "/kb", element: <KbView /> },
-			{ path: "/integrations", element: <IntegrationsView /> },
-			{ path: "/settings", element: <SettingsView /> },
-			{ path: "/onboarding", element: <OnboardingView /> },
-		],
-	},
-]);
+const router = createBrowserRouter(
+	[
+		{
+			element: <OnboardingGate />,
+			children: [
+				{ path: "/", element: <ChatView /> },
+				{ path: "/tasks", element: <TasksView /> },
+				{ path: "/routines", element: <RoutinesView /> },
+				{ path: "/routines/:id/runs/:runId", element: <RunDetailView /> },
+				{ path: "/inbox", element: <InboxView /> },
+				{ path: "/marketplace", element: <MarketplaceView /> },
+				{ path: "/skills", element: <SkillsView /> },
+				{ path: "/kb", element: <KbView /> },
+				{ path: "/integrations", element: <IntegrationsView /> },
+				{ path: "/settings", element: <SettingsView /> },
+				{ path: "/onboarding", element: <OnboardingView /> },
+			],
+		},
+	],
+	{ basename: import.meta.env.BASE_URL },
+);
 
 export function AppRouter() {
 	return <RouterProvider router={router} />;
