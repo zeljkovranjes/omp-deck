@@ -20,6 +20,8 @@ services:
       - "127.0.0.1:1455:1455"
     networks:
       - sys-gateway
+    env_file:
+      - ../data/.env
     environment:
       OMP_DECK_HOST: "0.0.0.0"
       OMP_DECK_PORT: "8787"
