@@ -50,6 +50,51 @@ RUN bun run build
 FROM oven/bun:1.3.14 AS runtime
 WORKDIR /app
 
+ARG DOTNET_SDK_VERSION=10.0.302
+ENV DOTNET_ROOT=/usr/share/dotnet \
+    PATH=/usr/share/dotnet:${PATH}
+
+# The MotionBricks OMP workspace owns its Linux validation and exact-commit
+# Windows handoff. Install the repository-declared toolchain in the immutable
+# image; authentication and mutable state remain on the persistent mounts.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        gh \
+        git \
+        git-lfs \
+        jq \
+        libicu76 \
+        openssh-client \
+        ripgrep \
+        rsync \
+        tar \
+    && curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+    && bash /tmp/dotnet-install.sh \
+        --version "${DOTNET_SDK_VERSION}" \
+        --install-dir "${DOTNET_ROOT}" \
+        --architecture x64 \
+        --os linux \
+        --no-path \
+    && rm -f /tmp/dotnet-install.sh \
+    && git lfs install --system --skip-repo \
+    && test "$(dotnet --version)" = "${DOTNET_SDK_VERSION}" \
+    && git --version \
+    && git-lfs --version \
+    && gh --version \
+    && ssh -V \
+    && rsync --version | head -1 \
+    && jq --version \
+    && rg --version | head -1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Login shells reset the image PATH on Debian. Keep the SDK reachable from the
+# standard login-shell path used by repository validation and agent commands.
+RUN ln -s "${DOTNET_ROOT}/dotnet" /usr/local/bin/dotnet
+
+
 # Re-install with only server-relevant workspace (still pulls protocol).
 COPY package.json bun.lock* tsconfig.base.json ./
 COPY packages/protocol/package.json packages/protocol/

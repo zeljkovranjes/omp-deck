@@ -26,7 +26,7 @@ const log = logger("slash-commands");
  * Resolution order matches the omp SDK's own:
  *
  * - **User scope**: `~/.omp/agent/commands/*.md`
- * - **Project scope** (only when `cwd` is supplied): `<cwd>/.omp/agent/commands/*.md`
+ * - **Project scope** (only when `cwd` is supplied): `<cwd>/.omp/commands/*.md`
  *
  * A project-scope file with the same basename as a user-scope file shadows the
  * user one, so the UI can show a single "winning" entry per command name.
@@ -59,8 +59,8 @@ export function buildSlashCommandsRouter(): Hono {
 			byName.set(entry.name, entry);
 		}
 		if (cwd && path.isAbsolute(cwd)) {
-			const projectDir = path.join(cwd, ".omp", "agent", "commands");
-			// Skip when the cwd's `.omp/agent/commands/` resolves to the exact
+			const projectDir = path.join(cwd, ".omp", "commands");
+			// Skip when the cwd's `.omp/commands/` resolves to the exact
 			// same directory as the user-global one — happens when the active
 			// session's cwd is the user's home dir (or a junction/link that
 			// points there). Without this, the project pass would relabel every
