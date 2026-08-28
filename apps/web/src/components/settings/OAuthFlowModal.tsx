@@ -44,6 +44,7 @@ export function OAuthFlowModal({ open, provider, providerName, onClose, onComple
 	const [promptAnswer, setPromptAnswer] = useState("");
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [manualCode, setManualCode] = useState("");
+	const [manualError, setManualError] = useState<string | null>(null);
 	const [submittingManual, setSubmittingManual] = useState(false);
 	const [showManual, setShowManual] = useState(false);
 
@@ -62,7 +63,10 @@ export function OAuthFlowModal({ open, provider, providerName, onClose, onComple
 		setPromptAnswer("");
 		setErrorMessage(null);
 		setManualCode("");
-		setShowManual(false);
+		setManualError(null);
+		// These providers redirect to a loopback listener. Keep the fallback
+		// expanded because a browser on a different machine cannot reach it.
+		setShowManual(provider === "openai-codex" || provider === "anthropic");
 		setSubmittingManual(false);
 
 		void authApi
@@ -131,14 +135,17 @@ export function OAuthFlowModal({ open, provider, providerName, onClose, onComple
 	async function submitManual(): Promise<void> {
 		if (!flowId || !manualCode.trim()) return;
 		setSubmittingManual(true);
+		setManualError(null);
 		try {
 			await authApi.submitManualCode(flowId, manualCode.trim());
 			setManualCode("");
 			setProgress("Exchanging authorization code…");
 			setPhase("progress");
 		} catch (err) {
-			setErrorMessage(err instanceof Error ? err.message : String(err));
-			setPhase("error");
+			// A bad paste is recoverable; keep the flow and textbox alive so the
+			// user can copy the correct callback URL and retry.
+			setManualError(err instanceof Error ? err.message : String(err));
+			setShowManual(true);
 		} finally {
 			setSubmittingManual(false);
 		}
@@ -175,13 +182,25 @@ export function OAuthFlowModal({ open, provider, providerName, onClose, onComple
 				{phase === "consent" && consentUrl ? (
 					<div className="flex flex-col gap-2">
 						<a href={consentUrl} target="_blank" rel="noopener noreferrer">
-							<Button variant="primary" className="w-full">Open consent screen in new tab</Button>
+							<Button variant="primary" className="w-full">
+								{provider === "openai-codex"
+									? "Open ChatGPT sign-in in a new tab"
+									: "Open consent screen in new tab"}
+							</Button>
 						</a>
 						{instructions ? <p className="text-xs text-ink-3">{instructions}</p> : null}
-						<p className="text-2xs text-ink-4">
-							After approving in the provider's flow, the SDK's local listener picks up the
-							redirect automatically. You can close this modal once the card flips to "signed in."
-						</p>
+						{provider === "openai-codex" ? (
+							<div className="rounded border border-line bg-paper-2 p-3 text-2xs text-ink-3">
+								After approving, OpenAI redirects to <code>localhost:1455</code>. If that tab says the
+								 callback failed or the site cannot be reached, the approval still succeeded: copy the
+								 <strong>full URL from its address bar</strong>, return here, and paste it below.
+							</div>
+						) : (
+							<p className="text-2xs text-ink-4">
+								After approving in the provider's flow, the SDK's local listener picks up the
+								redirect automatically. You can close this modal once the card flips to "signed in."
+							</p>
+						)}
 					</div>
 				) : null}
 
@@ -239,6 +258,7 @@ export function OAuthFlowModal({ open, provider, providerName, onClose, onComple
 								placeholder="Paste redirect URL or raw code"
 								className="rounded border border-line bg-paper px-2 py-1.5 font-mono text-2xs"
 							/>
+							{manualError ? <p className="text-2xs text-danger">{manualError}</p> : null}
 							<Button onClick={submitManual} disabled={!manualCode.trim() || submittingManual}>
 								{submittingManual ? "Submitting…" : "Submit code"}
 							</Button>

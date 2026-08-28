@@ -14,7 +14,15 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 	});
 	if (!res.ok) {
 		const body = await res.text().catch(() => "");
-		throw new Error(body || `HTTP ${res.status} ${path}`);
+		let message = body;
+		try {
+			const parsed = JSON.parse(body) as { message?: unknown; error?: unknown };
+			if (typeof parsed.message === "string") message = parsed.message;
+			else if (typeof parsed.error === "string") message = parsed.error;
+		} catch {
+			// Non-JSON error body; show it as-is.
+		}
+		throw new Error(message || `HTTP ${res.status} ${path}`);
 	}
 	return (await res.json()) as T;
 }
