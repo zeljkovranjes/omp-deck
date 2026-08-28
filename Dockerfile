@@ -116,11 +116,19 @@ COPY starter-extensions starter-extensions
 # Built web assets.
 COPY --from=web-build /app/apps/web/dist /app/apps/web/dist
 
+# Bare-image runs need writable defaults even when the image executes as uid
+# 1000. Compose overrides these paths with persistent bind mounts.
+RUN install -d -o bun -g bun -m 0700 /home/bun/.omp /home/bun/.local/share/omp-deck
+
 # Server resolves OMP_DECK_WEB_DIST or auto-discovers ../web/dist relative to
 # its cwd. Pin it explicitly here.
 ENV OMP_DECK_WEB_DIST=/app/apps/web/dist \
     OMP_DECK_HOST=0.0.0.0 \
     OMP_DECK_PORT=8787 \
+    OMP_DECK_DATA_DIR=/home/bun/.local/share/omp-deck \
+    OMP_DECK_DB_PATH=/home/bun/.local/share/omp-deck/deck.db \
+    OMP_DECK_UPLOADS_ROOT=/home/bun/.local/share/omp-deck/uploads \
+    OMP_AGENT_DIR=/home/bun/.omp/agent \
     NODE_ENV=production
 
 WORKDIR /app/apps/server
