@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, normalize } from "node:path";
 
 import { patchOpenAiOAuthListener } from "./patch-openai-oauth-listener.mjs";
 
@@ -38,7 +38,7 @@ describe("patchOpenAiOAuthListener", () => {
 			].join("\n"),
 		);
 
-		expect(await patchOpenAiOAuthListener(root)).toBe(relativePath);
+		expect(await patchOpenAiOAuthListener(root)).toBe(normalize(relativePath));
 		const patched = await readFile(filePath, "utf8");
 		expect(patched).toContain(
 			'callbackHostname: process.env.OMP_DECK_OAUTH_BIND_HOST ?? "localhost"',
@@ -56,7 +56,7 @@ describe("patchOpenAiOAuthListener", () => {
 			"\t\tsuper(ctrl, CALLBACK_PORT, CALLBACK_PATH);\n",
 		);
 
-		expect(await patchOpenAiOAuthListener(root)).toBe(relativePath);
+		expect(await patchOpenAiOAuthListener(root)).toBe(normalize(relativePath));
 		const patched = await readFile(filePath, "utf8");
 		expect(patched).toContain("process.env.OMP_DECK_OAUTH_BIND_HOST");
 		expect(patched).toContain(
