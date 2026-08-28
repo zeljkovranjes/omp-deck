@@ -48,11 +48,7 @@ import * as fs from "node:fs/promises";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent";
 import type { AgentToolResult } from "@oh-my-pi/pi-coding-agent/extensibility/extensions";
 import { resolveLocalUrlToPath } from "@oh-my-pi/pi-coding-agent/internal-urls";
-import {
-	type PlanApprovalDetails,
-	renameApprovedPlanFile,
-	resolvePlanTitle,
-} from "@oh-my-pi/pi-coding-agent/plan-mode/approved-plan";
+import { type PlanApprovalDetails, resolvePlanTitle } from "@oh-my-pi/pi-coding-agent/plan-mode/approved-plan";
 import { type ResolveToolDetails, runResolveInvocation } from "@oh-my-pi/pi-coding-agent/tools/resolve";
 import { ToolError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
 import type {
@@ -134,6 +130,60 @@ interface PendingApproval {
 	reject: (err: Error) => void;
 }
 
+interface DeckPlanApprovalDetails extends PlanApprovalDetails {
+	/** OMP Deck retains its title-derived artifact path contract across SDK 16. */
+	finalPlanFilePath: string;
+}
+
+async function renameApprovedPlanFile(options: {
+	planFilePath: string;
+	finalPlanFilePath: string;
+	getArtifactsDir: () => string | null;
+	getSessionId: () => string | null;
+}): Promise<void> {
+	const { planFilePath, finalPlanFilePath, getArtifactsDir, getSessionId } = options;
+	for (const [label, url] of [
+		["source", planFilePath],
+		["destination", finalPlanFilePath],
+	] as const) {
+		if (!url.startsWith("local:/") && !url.startsWith("local://")) {
+			throw new Error(`Approved plan ${label} path must use the local: scheme (received ${url}).`);
+		}
+	}
+
+	const resolveOptions = { getArtifactsDir, getSessionId };
+	const source = resolveLocalUrlToPath(planFilePath, resolveOptions);
+	const destination = resolveLocalUrlToPath(finalPlanFilePath, resolveOptions);
+	if (source === destination) return;
+
+	try {
+		const destinationStat = await fs.stat(destination);
+		if (destinationStat.isFile()) {
+			throw new Error(
+				`Plan destination already exists at ${finalPlanFilePath}. Choose a different title and submit again.`,
+			);
+		}
+		throw new Error(`Plan destination exists but is not a file: ${finalPlanFilePath}`);
+	} catch (error) {
+		if (
+			typeof error !== "object" ||
+			error === null ||
+			!("code" in error) ||
+			error.code !== "ENOENT"
+		) {
+			throw error;
+		}
+	}
+
+	try {
+		await fs.rename(source, destination);
+	} catch (error) {
+		throw new Error(
+			`Failed to rename approved plan from ${planFilePath} to ${finalPlanFilePath}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
+
 /**
  * Minimal `AgentSession` surface this bridge needs. Listed here as a
  * structural interface so tests can substitute a hand-rolled fake without
@@ -151,7 +201,7 @@ export interface PlanModeSessionSurface {
 	prompt(
 		text: string,
 		options?: { synthetic?: boolean; streamingBehavior?: "steer" | "followUp" },
-	): Promise<void>;
+	): Promise<void | boolean>;
 }
 
 export interface PlanModeBridgeArgs {
@@ -455,7 +505,7 @@ export class PlanModeBridge {
 							finalPlanFilePath: suggestedFinalPath,
 							title: normalized.title,
 							planExists: true,
-						} satisfies PlanApprovalDetails,
+						} satisfies DeckPlanApprovalDetails,
 					};
 				}
 
@@ -518,7 +568,7 @@ export class PlanModeBridge {
 						finalPlanFilePath,
 						title: stripMdExtension(extractFileName(finalPlanFilePath)),
 						planExists: true,
-					} satisfies PlanApprovalDetails,
+					} satisfies DeckPlanApprovalDetails,
 				};
 			},
 		});
