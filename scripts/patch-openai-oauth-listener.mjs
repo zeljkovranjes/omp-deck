@@ -28,14 +28,22 @@ const legacyReplacement = `\t\tsuper(
 const registryNeedle = `\t\tsuper(ctrl, {
 \t\t\tpreferredPort: CALLBACK_PORT,
 \t\t\tcallbackPath: CALLBACK_PATH,
+\t\t\t// Enforce the fixed port: OpenAI only allows http://localhost:1455/auth/callback.
+\t\t\t// Without this, a busy port 1455 falls back to a random port, and the token
+\t\t\t// exchange would fail with 403 because the redirect_uri no longer matches the
+\t\t\t// registered allowlist entry.
 \t\t\tredirectUri: \`http://localhost:\${CALLBACK_PORT}\${CALLBACK_PATH}\`,
-\t\t});`;
+\t\t} satisfies OAuthCallbackFlowOptions);`;
 const registryReplacement = `\t\tsuper(ctrl, {
 \t\t\tpreferredPort: CALLBACK_PORT,
 \t\t\tcallbackPath: CALLBACK_PATH,
 \t\t\tcallbackHostname: process.env.OMP_DECK_OAUTH_BIND_HOST ?? "localhost",
+\t\t\t// Enforce the fixed port: OpenAI only allows http://localhost:1455/auth/callback.
+\t\t\t// Without this, a busy port 1455 falls back to a random port, and the token
+\t\t\t// exchange would fail with 403 because the redirect_uri no longer matches the
+\t\t\t// registered allowlist entry.
 \t\t\tredirectUri: \`http://localhost:\${CALLBACK_PORT}\${CALLBACK_PATH}\`,
-\t\t});`;
+\t\t} satisfies OAuthCallbackFlowOptions);`;
 
 const variants = [
 	{
