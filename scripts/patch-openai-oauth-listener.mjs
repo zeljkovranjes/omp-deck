@@ -11,23 +11,61 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 
-const glob = new Bun.Glob(
-	"node_modules/.bun/@oh-my-pi+pi-ai@*/node_modules/@oh-my-pi/pi-ai/src/utils/oauth/openai-codex.ts",
-);
-const matches = [...glob.scanSync({ cwd: process.cwd(), onlyFiles: true, dot: true })];
+const legacyNeedle = "\t\tsuper(ctrl, CALLBACK_PORT, CALLBACK_PATH);";
+const legacyReplacement = `\t\tsuper(
+\t\t\tctrl,
+\t\t\tprocess.env.OMP_DECK_OAUTH_BIND_HOST
+\t\t\t\t? {
+\t\t\t\t\tpreferredPort: CALLBACK_PORT,
+\t\t\t\t\tcallbackPath: CALLBACK_PATH,
+\t\t\t\t\tcallbackHostname: process.env.OMP_DECK_OAUTH_BIND_HOST,
+\t\t\t\t\tredirectUri: \`http://localhost:\${CALLBACK_PORT}\${CALLBACK_PATH}\`,
+\t\t\t\t}
+\t\t\t\t: CALLBACK_PORT,
+\t\t\tCALLBACK_PATH,
+\t\t);`;
 
-if (matches.length !== 1) {
-	throw new Error(`Expected exactly one pi-ai OpenAI OAuth source file, found ${matches.length}`);
+const registryNeedle = "\t\t\tcallbackPath: CALLBACK_PATH,\n";
+const registryReplacement =
+	registryNeedle +
+	'\t\t\tcallbackHostname: process.env.OMP_DECK_OAUTH_BIND_HOST ?? "localhost",\n';
+
+const variants = [
+	{
+		glob: "node_modules/.bun/@oh-my-pi+pi-ai@*/node_modules/@oh-my-pi/pi-ai/src/registry/oauth/openai-codex.ts",
+		needle: registryNeedle,
+		replacement: registryReplacement,
+	},
+	{
+		glob: "node_modules/.bun/@oh-my-pi+pi-ai@*/node_modules/@oh-my-pi/pi-ai/src/utils/oauth/openai-codex.ts",
+		needle: legacyNeedle,
+		replacement: legacyReplacement,
+	},
+];
+
+export async function patchOpenAiOAuthListener(root = process.cwd()) {
+	const matches = variants.flatMap(variant =>
+		[...new Bun.Glob(variant.glob).scanSync({ cwd: root, onlyFiles: true, dot: true })].map(
+			path => ({ ...variant, path }),
+		),
+	);
+	if (matches.length !== 1) {
+		throw new Error(
+			`Expected exactly one supported pi-ai OpenAI OAuth source file, found ${matches.length}`,
+		);
+	}
+
+	const { path, needle, replacement } = matches[0];
+	const source = await readFile(`${root}/${path}`, "utf8");
+	if (!source.includes(needle)) {
+		throw new Error("pi-ai OpenAI OAuth constructor changed; refusing to apply an unsafe patch");
+	}
+
+	await writeFile(`${root}/${path}`, source.replace(needle, replacement));
+	return path;
 }
 
-const path = matches[0];
-const source = await readFile(path, "utf8");
-const needle = "\t\tsuper(ctrl, CALLBACK_PORT, CALLBACK_PATH);";
-const replacement = `\t\tsuper(\n\t\t\tctrl,\n\t\t\tprocess.env.OMP_DECK_OAUTH_BIND_HOST\n\t\t\t\t? {\n\t\t\t\t\tpreferredPort: CALLBACK_PORT,\n\t\t\t\t\tcallbackPath: CALLBACK_PATH,\n\t\t\t\t\tcallbackHostname: process.env.OMP_DECK_OAUTH_BIND_HOST,\n\t\t\t\t\tredirectUri: \`http://localhost:\${CALLBACK_PORT}\${CALLBACK_PATH}\`,\n\t\t\t\t}\n\t\t\t\t: CALLBACK_PORT,\n\t\t\tCALLBACK_PATH,\n\t\t);`;
-
-if (!source.includes(needle)) {
-	throw new Error("pi-ai OpenAI OAuth constructor changed; refusing to apply an unsafe patch");
+if (import.meta.main) {
+	const path = await patchOpenAiOAuthListener();
+	console.log(`Patched OpenAI OAuth callback bind address in ${path}`);
 }
-
-await writeFile(path, source.replace(needle, replacement));
-console.log(`Patched OpenAI OAuth callback bind address in ${path}`);
