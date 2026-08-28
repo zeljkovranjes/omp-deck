@@ -25,10 +25,17 @@ const legacyReplacement = `\t\tsuper(
 \t\t\tCALLBACK_PATH,
 \t\t);`;
 
-const registryNeedle = "\t\t\tcallbackPath: CALLBACK_PATH,\n";
-const registryReplacement =
-	registryNeedle +
-	'\t\t\tcallbackHostname: process.env.OMP_DECK_OAUTH_BIND_HOST ?? "localhost",\n';
+const registryNeedle = `\t\tsuper(ctrl, {
+\t\t\tpreferredPort: CALLBACK_PORT,
+\t\t\tcallbackPath: CALLBACK_PATH,
+\t\t\tredirectUri: \`http://localhost:\${CALLBACK_PORT}\${CALLBACK_PATH}\`,
+\t\t});`;
+const registryReplacement = `\t\tsuper(ctrl, {
+\t\t\tpreferredPort: CALLBACK_PORT,
+\t\t\tcallbackPath: CALLBACK_PATH,
+\t\t\tcallbackHostname: process.env.OMP_DECK_OAUTH_BIND_HOST ?? "localhost",
+\t\t\tredirectUri: \`http://localhost:\${CALLBACK_PORT}\${CALLBACK_PATH}\`,
+\t\t});`;
 
 const variants = [
 	{

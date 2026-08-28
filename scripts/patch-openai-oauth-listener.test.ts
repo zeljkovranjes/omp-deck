@@ -72,6 +72,17 @@ describe("patchOpenAiOAuthListener", () => {
 		const relativePath =
 			"node_modules/.bun/@oh-my-pi+pi-ai@16.0.1/node_modules/@oh-my-pi/pi-ai/src/registry/oauth/openai-codex.ts";
 		const { root } = await fixture(relativePath, "constructor changed");
+		await writeFile(
+			join(root, relativePath),
+			[
+				"\t\tsuper(ctrl, {",
+				"\t\t\tpreferredPort: CALLBACK_PORT,",
+				"\t\t\tcallbackPath: CALLBACK_PATH,",
+				'\t\t\tcallbackHostname: "127.0.0.1",',
+				"\t\t\tredirectUri: `http://localhost:\${CALLBACK_PORT}\${CALLBACK_PATH}`,",
+				"\t\t});",
+			].join("\n"),
+		);
 		await expect(patchOpenAiOAuthListener(root)).rejects.toThrow("constructor changed");
 	});
 });
