@@ -1,3 +1,6 @@
+# The /agents/omp browser build requires the versioned Caddy routing contract in
+# docs/deployment-motion-bricks.md. Validate it with the gateway smoke script.
+
 services:
   omp-deck:
     build:

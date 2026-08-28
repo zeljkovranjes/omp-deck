@@ -11,6 +11,7 @@ interface without one of these.
 - [SSH tunnel](#ssh-tunnel)
 - [Docker](#docker)
 - [Hardening checklist](#hardening-checklist)
+- [MotionBricks Docker profile](./deployment-motion-bricks.md)
 
 ## Tailscale-gated (recommended)
 

@@ -11,7 +11,7 @@
 #
 # Run (loopback, expose via Tailscale Funnel / SSH tunnel on host):
 #   docker run --rm -p 127.0.0.1:8787:8787 \
-#     -v omp-deck-agent:/root/.omp/agent \
+#     -v omp-deck-agent:/home/bun/.omp/agent \
 #     -e OMP_DECK_HOST=0.0.0.0 \
 #     -e OMP_DECK_PORT=8787 \
 #     omp-deck
@@ -22,7 +22,9 @@
 # because `@oh-my-pi/pi-natives` ships prebuilt `.node` binaries linked
 # against glibc's `ld-linux-x86-64.so.2`; Alpine's musl libc would fail
 # to load them at runtime (no `linux-x64-musl` variant exists).
-FROM oven/bun:1.3.14 AS web-build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.302-noble-amd64@sha256:7a91ccecc26d71bf7688c627a6b5eae2e27bb2cd1e37e8abe738348904245692 AS dotnet-sdk
+
+FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS web-build
 WORKDIR /app
 
 ARG OMP_DECK_BASE_PATH=/
@@ -47,7 +49,7 @@ WORKDIR /app/apps/web
 RUN bun run build
 
 # ─── Stage 2: runtime ──────────────────────────────────────────────────────
-FROM oven/bun:1.3.14 AS runtime
+FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS runtime
 WORKDIR /app
 
 ARG DOTNET_SDK_VERSION=10.0.302
@@ -55,6 +57,8 @@ ENV DOTNET_ROOT=/usr/share/dotnet \
     PATH=/usr/share/dotnet:${PATH}
 
 # The MotionBricks OMP workspace owns its Linux validation and exact-commit
+# Copy the exact SDK from Microsoft's digest-pinned official image.
+COPY --from=dotnet-sdk /usr/share/dotnet /usr/share/dotnet
 # Windows handoff. Install the repository-declared toolchain in the immutable
 # image; authentication and mutable state remain on the persistent mounts.
 RUN apt-get update \
@@ -71,14 +75,6 @@ RUN apt-get update \
         ripgrep \
         rsync \
         tar \
-    && curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
-    && bash /tmp/dotnet-install.sh \
-        --version "${DOTNET_SDK_VERSION}" \
-        --install-dir "${DOTNET_ROOT}" \
-        --architecture x64 \
-        --os linux \
-        --no-path \
-    && rm -f /tmp/dotnet-install.sh \
     && git lfs install --system --skip-repo \
     && test "$(dotnet --version)" = "${DOTNET_SDK_VERSION}" \
     && git --version \
@@ -128,5 +124,6 @@ ENV OMP_DECK_WEB_DIST=/app/apps/web/dist \
     NODE_ENV=production
 
 WORKDIR /app/apps/server
+USER bun
 EXPOSE 8787
 CMD ["bun", "src/index.ts"]

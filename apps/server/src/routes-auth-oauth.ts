@@ -62,17 +62,17 @@ function defer<T>(): Deferred<T> {
  * makes every retry return the same bad value in a tight loop, which wedges the
  * flow and can burn CPU. This small queue gives each SDK request a fresh wait.
  */
-interface ManualCodeChannel {
+export interface ManualCodeChannel {
 	queued: string[];
 	waiters: Deferred<string>[];
 	closed?: Error;
 }
 
-function createManualCodeChannel(): ManualCodeChannel {
+export function createManualCodeChannel(): ManualCodeChannel {
 	return { queued: [], waiters: [] };
 }
 
-function takeManualCode(channel: ManualCodeChannel): Promise<string> {
+export function takeManualCode(channel: ManualCodeChannel): Promise<string> {
 	const queued = channel.queued.shift();
 	if (queued !== undefined) return Promise.resolve(queued);
 	if (channel.closed) return Promise.reject(channel.closed);
@@ -81,7 +81,7 @@ function takeManualCode(channel: ManualCodeChannel): Promise<string> {
 	return waiter.promise;
 }
 
-function offerManualCode(channel: ManualCodeChannel, value: string): boolean {
+export function offerManualCode(channel: ManualCodeChannel, value: string): boolean {
 	if (channel.closed) return false;
 	const waiter = channel.waiters.shift();
 	if (waiter) waiter.resolve(value);
@@ -89,7 +89,7 @@ function offerManualCode(channel: ManualCodeChannel, value: string): boolean {
 	return true;
 }
 
-function closeManualCodeChannel(channel: ManualCodeChannel, reason: Error): void {
+export function closeManualCodeChannel(channel: ManualCodeChannel, reason: Error): void {
 	if (channel.closed) return;
 	channel.closed = reason;
 	channel.queued.length = 0;
@@ -97,7 +97,7 @@ function closeManualCodeChannel(channel: ManualCodeChannel, reason: Error): void
 }
 
 /** Return an actionable error for an obviously invalid manual callback. */
-function validateManualCallbackInput(input: string): string | null {
+export function validateManualCallbackInput(input: string): string | null {
 	const value = input.trim();
 	if (!value) return "Paste the callback URL or authorization code.";
 
@@ -125,6 +125,24 @@ function validateManualCallbackInput(input: string): string | null {
 	return null;
 }
 
+export type ManualCodeSubmission =
+	| { ok: true }
+	| { ok: false; kind: "invalid-callback" | "flow-closed"; message: string };
+
+/** Validate and enqueue a manual callback as one tested operation. */
+export function submitManualCode(channel: ManualCodeChannel, input: string): ManualCodeSubmission {
+	const validationError = validateManualCallbackInput(input);
+	if (validationError) return { ok: false, kind: "invalid-callback", message: validationError };
+	if (!offerManualCode(channel, input.trim())) {
+		return {
+			ok: false,
+			kind: "flow-closed",
+			message: "This OAuth flow has already ended. Start a new sign-in.",
+		};
+	}
+	return { ok: true };
+}
+
 const log = logger("oauth-routes");
 
 /**
@@ -140,7 +158,7 @@ const log = logger("oauth-routes");
  */
 const OAUTH_FLOW_MAX_MS = 5 * 60_000;
 
-interface ActiveFlow {
+export interface ActiveFlow {
 	flowId: string;
 	provider: string;
 	ac: AbortController;
@@ -171,7 +189,7 @@ const flowsById = new Map<string, ActiveFlow>();
  * deferreds hanging, so cancelling an Ollama flow waiting on endpoint
  * input left the SDK promise pending and the flow effectively un-cleaned.
  */
-function abortFlow(flow: ActiveFlow, reason: string): void {
+export function abortFlow(flow: ActiveFlow, reason: string): void {
 	if (flow.ac.signal.aborted) return; // already torn down
 	try {
 		flow.ac.abort();
@@ -409,10 +427,12 @@ export function buildAuthOAuthRouter(): Hono {
 		if (!body.code || typeof body.code !== "string") {
 			return c.json({ error: "code is required" }, 400);
 		}
-		const validationError = validateManualCallbackInput(body.code);
-		if (validationError) return c.json({ error: "invalid-callback", message: validationError }, 400);
-		if (!offerManualCode(flow.manualCode, body.code.trim())) {
-			return c.json({ error: "flow closed", message: "This OAuth flow has already ended. Start a new sign-in." }, 409);
+		const submission = submitManualCode(flow.manualCode, body.code);
+		if (!submission.ok) {
+			if (submission.kind === "invalid-callback") {
+				return c.json({ error: submission.kind, message: submission.message }, 400);
+			}
+			return c.json({ error: "flow closed", message: submission.message }, 409);
 		}
 		return c.json({ ok: true });
 	});
